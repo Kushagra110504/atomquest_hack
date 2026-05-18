@@ -1,0 +1,175 @@
+// AtomQuest — Goal Setting & Tracking Portal
+// Prisma Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+  ADMIN
+}
+
+enum UOM {
+  NUMERIC_MIN
+  NUMERIC_MAX
+  TIMELINE
+  ZERO
+}
+
+enum GoalStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  LOCKED
+}
+
+enum AchievementStatus {
+  NOT_STARTED
+  ON_TRACK
+  COMPLETED
+}
+
+enum Quarter {
+  Q1
+  Q2
+  Q3
+  Q4
+}
+
+enum NotificationType {
+  EMAIL
+  TEAMS
+}
+
+enum NotificationStatus {
+  SENT
+  FAILED
+  PENDING
+}
+
+enum Period {
+  GOAL_SETTING
+  Q1
+  Q2
+  Q3
+  Q4
+}
+
+// ─────────────────────────────────────────────
+// Models
+// ─────────────────────────────────────────────
+
+model User {
+  id         String   @id @default(cuid())
+  name       String
+  email      String   @unique
+  password   String  @default("")
+  role       Role
+  department String?
+  azureAdId  String?  @unique
+
+  // Self-relation: employee → manager
+  managerId  String?
+  manager    User?    @relation("ManagerEmployees", fields: [managerId], references: [id])
+  employees  User[]   @relation("ManagerEmployees")
+
+  createdAt  DateTime @default(now())
+
+  // Reverse relations
+  goals              Goal[]            @relation("EmployeeGoals")
+  sharedGoals        Goal[]            @relation("SharedGoals")
+  checkInComments    CheckInComment[]
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+}
+
+model Goal {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  thrustArea  String?
+  uom         UOM
+  target      Float
+  weightage   Float
+  status      GoalStatus @default(DRAFT)
+
+  isShared    Boolean    @default(false)
+  sharedById  String?
+  sharedBy    User?      @relation("SharedGoals", fields: [sharedById], references: [id])
+
+  employeeId  String
+  employee    User       @relation("EmployeeGoals", fields: [employeeId], references: [id])
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Reverse relations
+  achievements     Achievement[]
+  checkInComments  CheckInComment[]
+  auditLogs        AuditLog[]
+}
+
+model Achievement {
+  id             String            @id @default(cuid())
+  goalId         String
+  goal           Goal              @relation(fields: [goalId], references: [id])
+  quarter        Quarter
+  actual         Float?
+  completionDate DateTime?
+  status         AchievementStatus @default(NOT_STARTED)
+  updatedAt      DateTime          @updatedAt
+}
+
+model CheckInComment {
+  id        String   @id @default(cuid())
+  goalId    String
+  goal      Goal     @relation(fields: [goalId], references: [id])
+  managerId String
+  manager   User     @relation(fields: [managerId], references: [id])
+  quarter   Quarter
+  comment   String
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  goalId    String?
+  goal      Goal?    @relation(fields: [goalId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  changes   Json
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id          String             @id @default(cuid())
+  type        NotificationType
+  event       String
+  recipientId String
+  recipient   User               @relation(fields: [recipientId], references: [id])
+  subject     String
+  body        String
+  deepLink    String?
+  status      NotificationStatus @default(PENDING)
+  readAt      DateTime?
+  createdAt   DateTime           @default(now())
+}
+
+model Cycle {
+  id            String  @id @default(cuid())
+  year          Int
+  currentPeriod Period
+  isActive      Boolean @default(false)
+}
